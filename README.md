@@ -2,38 +2,113 @@
 
 JetRacerのようなRCカーをROS 2で動かすための基盤です。まずDualShock 4で手動運転し、今後は自動運転ノードからの指令を切り替えて使います。
 
-車載側の暫定の対象環境は **Ubuntu 22.04 / ROS 2 Humble / Python 3.10** です。実機構成に合わせて環境を確定してください。
+車載側はUbuntu上のROS 2を使用します。実機構成に合わせて環境を確定してください。
 
 学習・オフラインのbag処理はLinux／macOSで行えます。[Pythonワークスペースのセットアップ](python_ws/README.md)から、[TinyLidarNetの学習手順](python_ws/tinylidarnet/README.md)へ進んでください。
 
 ## セットアップ
 
-### 1. ROS 2関連パッケージの導入
+### 1. ROS 2本体と開発環境の導入
 
-ROS 2を導入済みのUbuntuで実行します。最初に使用するディストリビューションの環境を読み込みます。以下はHumbleの例で、読み込み後の`ROS_DISTRO`は`humble`になります。
+以下は車載側のUbuntu・Bash向けです。学習PCでbag変換・学習だけを行う場合はROS 2不要で、[Pythonワークスペース](python_ws/README.md)のセットアップへ進めます。
+
+#### 使用するディストリビューションを選ぶ
+
+| Ubuntu | ROS 2 | OS標準Python | 選択する値 |
+|---|---|---|---|
+| 22.04（Jammy） | Humble | 3.10 | `humble` |
+| 24.04（Noble） | Jazzy | 3.12 | `jazzy` |
+
+公式のapt導入手順に合わせた組み合わせです（[Humble](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html)、[Jazzy](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html)）。JetsonではJetPack・ボード用ドライバー・PyTorchの対応も含めて選びます。`urg_node2`の[公式検証環境](https://github.com/Hokuyo-aut/urg_node2#supported-models)にはHumbleまでが記載されており、Jazzyでのビルド・実機動作は別途確認が必要です。このプロジェクトも両環境でのROS統合・実機検証は未実施です。
+
+新しいターミナルで、どちらか一方を指定します。以下の手順ではこの値を共通で使います。
 
 ```bash
-source /opt/ros/humble/setup.bash
+export RC_ROS_DISTRO=humble  # Ubuntu 24.04の場合は jazzy
+cat /etc/os-release
+```
+
+変数を変えるだけで異なるUbuntu向けパッケージを導入できるわけではありません。別ディストリビューションへ移る場合は対応するOS環境を用意し、外部ドライバーと本プロジェクトをそれぞれ新しいワークスペースでビルドしてください。既存の`build/`・`install/`・Python仮想環境は流用しません。
+
+#### UTF-8とaptリポジトリを準備する
+
+ROS 2導入済みの場合は「ROS関連パッケージと車載Python環境」へ進めます。
+
+```bash
 sudo apt update
-sudo apt install git python3-setuptools python3-traitlets python3-colcon-common-extensions python3-rosdep
-sudo apt install ros-${ROS_DISTRO}-joy
-sudo apt install ros-${ROS_DISTRO}-rosbag2-storage-mcap # rosbagのMCAP形式での記録用
+sudo apt install locales curl ca-certificates software-properties-common python3
+sudo locale-gen en_US.UTF-8
+sudo update-locale LANG=en_US.UTF-8
+export LANG=en_US.UTF-8
+locale
+sudo add-apt-repository universe
+```
+
+すでにUTF-8ロケールを使用している場合は、その設定を使えます。続いて、公式の`ros2-apt-source`でROSの署名鍵とaptリポジトリを登録します。
+
+```bash
+RC_UBUNTU_CODENAME=$(. /etc/os-release && printf '%s' "$VERSION_CODENAME")
+RC_ROS_APT_VERSION=$(curl -fsSL https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | python3 -c 'import json, sys; print(json.load(sys.stdin)["tag_name"])')
+curl -fL -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${RC_ROS_APT_VERSION}/ros2-apt-source_${RC_ROS_APT_VERSION}.${RC_UBUNTU_CODENAME}_all.deb"
+sudo dpkg -i /tmp/ros2-apt-source.deb
+sudo apt update
+```
+
+#### ROS 2をインストールする
+
+公式手順に従い、OSを最新のパッケージ状態にしてから導入します。特にUbuntu 22.04初期イメージでは`systemd`・`udev`の更新が必要です。Jetsonでは使用中のJetPackの更新方針に合わせて実施してください。
+
+```bash
+sudo apt upgrade
+sudo apt install "ros-${RC_ROS_DISTRO}-ros-base"
+source "/opt/ros/${RC_ROS_DISTRO}/setup.bash"
+ros2 --help
+```
+
+車載側はGUIを含まない`ros-base`を基本とします。RVizなども使う場合は、追加で`sudo apt install "ros-${RC_ROS_DISTRO}-desktop"`を実行できます。
+
+#### ROS関連パッケージと車載Python環境
+
+```bash
+source "/opt/ros/${RC_ROS_DISTRO}/setup.bash"
+sudo apt install build-essential cmake git python3-dev python3-pip python3-venv python3-setuptools python3-colcon-common-extensions python3-rosdep
+sudo apt install "ros-${ROS_DISTRO}-joy" "ros-${ROS_DISTRO}-ros2bag"
+sudo apt install "ros-${ROS_DISTRO}-rosbag2-storage-mcap" # rosbag記録用
+# 初回のみ。すでに初期化済みの場合は省略
+sudo rosdep init
+rosdep update
+```
+
+JetRacerとTinyLidarNet用に、ROSのPythonパッケージも参照できる車載専用の仮想環境を作ります。Ubuntu 24.04でもOS管理のPythonへ直接pipインストールせずに使えます。
+
+```bash
+/usr/bin/python3 -m venv --system-site-packages "$HOME/.venvs/rc-car-${RC_ROS_DISTRO}"
+source "$HOME/.venvs/rc-car-${RC_ROS_DISTRO}/bin/activate"
+python3 -m pip install setuptools wheel
+```
+
+以降の車載Pythonパッケージの導入・プロジェクトのビルド・起動はこの環境を使います。学習PCの`python_ws/.venv`とは別です。新しいターミナルでは毎回、次を実行してください。zshを使う場合はROSの`setup.bash`を`setup.zsh`に読み替えます。
+
+```bash
+export RC_ROS_DISTRO=humble  # 選択した値。Ubuntu 24.04なら jazzy
+source "/opt/ros/${RC_ROS_DISTRO}/setup.bash"
+source "$HOME/.venvs/rc-car-${RC_ROS_DISTRO}/bin/activate"
 ```
 
 ### 2. NVIDIA JetRacerの導入（実機用）
 
 車載側で、本家の[JetRacer導入手順](https://github.com/NVIDIA-AI-IOT/jetracer/blob/master/docs/software_setup.md#step-5---install-python-packages)に沿ってPythonパッケージを導入します。模擬モードだけを使う場合は、この手順を省略できます。
 
-ROSパッケージではないため、このプロジェクトの`ros2_ws/src`の外に配置します。以下ではホームディレクトリに取得します。
+ROSパッケージではないため、このプロジェクトの`ros2_ws/src`の外に配置します。上で作った車載仮想環境を有効にして、以下ではホームディレクトリに取得します。
 
 ```bash
 cd ~
 git clone https://github.com/NVIDIA-AI-IOT/jetracer.git
 cd jetracer
-sudo python3 setup.py install
+python3 -m pip install ./ traitlets
 ```
 
-`jetracer`、`adafruit-circuitpython-servokit`、`traitlets`、Adafruitのボード依存環境が必要です。ROSノードが使うPythonからインポートできる状態にしてください。JetRacerのインストールではServoKitの依存関係も導入されますが、ボード側のI2C設定・アクセス権限は別途必要です。
+`jetracer`、`adafruit-circuitpython-servokit`、`traitlets`、Adafruitのボード依存環境が必要です。ROSノードが使うPythonからインポートできる状態にしてください。JetRacerのインストールではServoKitの依存関係も導入されます。ボード側のI2C有効化、`/dev/i2c-*`のアクセス権限、Adafruit Blinkaのボード対応は別途確認してください。利用ボードのJetPack／ピン設定に従って準備します。確認用ツールは`sudo apt install i2c-tools`で導入できます。JetRacerとAdafruit依存ライブラリのPython 3.12・利用ボードでの動作は未検証です。
 
 ハードウェアを初期化せずに、インポートを確認できます。
 
@@ -45,10 +120,10 @@ python3 -c 'from jetracer.nvidia_racecar import NvidiaRacecar; print("JetRacer i
 
 [公式urg_node2](https://github.com/Hokuyo-aut/urg_node2)を、このリポジトリとは別の`~/drivers_ws`でビルド・インストールします。このプロジェクトにはsubmoduleとして登録せず、事前導入したドライバーとして利用します。手動運転だけの場合は省略できます。
 
-車載側で、プロジェクトの環境をまだ読み込んでいない新しいターミナルから実行します。`rosdep`が未初期化の場合だけ、先に`sudo rosdep init`を一度実行してください。
+車載側で、プロジェクトの環境をまだ読み込んでいない新しいターミナルから実行します。`RC_ROS_DISTRO`には手順1で選んだ値を設定してください。
 
 ```bash
-source /opt/ros/humble/setup.bash
+source "/opt/ros/${RC_ROS_DISTRO}/setup.bash"
 sudo apt install build-essential
 mkdir -p ~/drivers_ws/src
 cd ~/drivers_ws/src
@@ -73,20 +148,22 @@ ros2 pkg prefix urg_node2
 
 ### 4. ワークスペースのビルド
 
-`rosdep`が未初期化の場合だけ、`sudo rosdep init`を一度実行します。その後、**このプロジェクトのリポジトリルートへ戻ってから**実行します。
+**このプロジェクトのリポジトリルートへ戻ってから**実行します。車載仮想環境のPythonでcolconを動かし、ROSノードが同じPythonで起動されるようにビルドします。
 
 ```bash
-source /opt/ros/humble/setup.bash
+source "/opt/ros/${RC_ROS_DISTRO}/setup.bash"
 # LiDARを使う場合：事前ビルドしたドライバーの環境を読み込む
 source ~/drivers_ws/install/setup.bash
+source "$HOME/.venvs/rc-car-${RC_ROS_DISTRO}/bin/activate"
 rosdep update
 cd ros2_ws
 rosdep install --from-paths src --ignore-src -r -y --rosdistro ${ROS_DISTRO}
-colcon build --symlink-install
+python3 /usr/bin/colcon build --symlink-install --cmake-args -DPython3_EXECUTABLE="$(command -v python3)"
 source install/setup.bash
+cd ..
 ```
 
-別ターミナルでも、ROS 2 → `~/drivers_ws/install/setup.bash` → このプロジェクトの`ros2_ws/install/setup.bash`の順で読み込んでください。LiDARを導入していない場合は`drivers_ws`の読み込みを省略します。起動手順は[まず模擬モードで確認](#まず模擬モードで確認)を参照してください。
+別ターミナルでも、手順1で車載仮想環境を有効にし、ROS 2 → `~/drivers_ws/install/setup.bash` → このプロジェクトの`ros2_ws/install/setup.bash`の順で読み込んでください。LiDARを導入していない場合は`drivers_ws`の読み込みを省略します。起動手順は[まず模擬モードで確認](#まず模擬モードで確認)を参照してください。
 
 ### 5. コントローラーのBluetooth接続
 
@@ -102,6 +179,26 @@ bash scripts/connect_controller.sh
 初回は、電源を切った状態からPS4では **PS + SHARE**、PS5では **PS + クリエイト** を長押しして、ライトが点滅するペアリングモードにします。登録済みの場合はPSボタンで電源を入れてください。スクリプトは登録済みの情報を利用し、最後にペアリング・信頼設定・接続の状態を確認します。実行時には管理者権限の認証が必要です。
 
 MACアドレスが分からない場合は、ペアリングモードにして`bluetoothctl`を起動し、`scan on`で表示される機器名とアドレスを確認してください。確認後は`scan off`、`quit`で終了します。
+
+### 6. データ転送と学習・推論の準備
+
+| 用途 | 実行する環境 | 追加で必要なもの |
+|---|---|---|
+| bag・重みの転送先 | Jetson | SSHサーバー、Python、PyYAML |
+| 転送スクリプト | ノートPC | Python 3.9以上、`ssh`・`scp` |
+| bag変換・学習 | ノートPC | uv、仮想環境、requirements.txt（rosbags・PyTorch等） |
+| TinyLidarNet推論 | 車載側 | ROSと同じPythonで使えるPyTorch、共有`tinylidarnet`パッケージ、学習済みモデル |
+
+転送を使う場合はJetsonで次を実行します。
+
+```bash
+sudo apt install openssh-server python3-yaml
+sudo systemctl enable --now ssh
+```
+
+ノートPCがUbuntuで`ssh`・`scp`が未導入の場合は`sudo apt install openssh-client`で導入します。通信可能なIPとログイン情報を準備してください。操作は[scriptsのREADME](scripts/README.md)に記載しています。
+
+学習PCは[uv・requirements.txtのセットアップ](python_ws/README.md)、車載推論は[TinyLidarNetのセットアップ](python_ws/tinylidarnet/README.md#1-セットアップ)へ進んでください。JetsonのCUDA推論にはJetPack・Pythonに対応したPyTorchが必要です。車載側で学習用のrequirements.txtをそのまま使うと対応済みPyTorchを置き換える場合があるため、推論側の手順に従います。手動運転だけならPyTorchは不要です。
 
 ## 構成
 
@@ -146,7 +243,7 @@ tests/                  # ROS・実機不要の標準ライブラリによるテ
 車載側の専用ターミナルで起動し、収録・推論中は動かしておきます。
 
 ```bash
-source /opt/ros/humble/setup.bash
+source "/opt/ros/${RC_ROS_DISTRO}/setup.bash"
 source ~/drivers_ws/install/setup.bash
 # このプロジェクトのリポジトリルートで実行
 source ros2_ws/install/setup.bash
@@ -351,6 +448,9 @@ python3 -m unittest discover -s tests -v
 パッケージのmaintainerは仮の値です。ライセンス表記は公開ライセンス未決定のため`Proprietary`としてあり、公開・配布方針が決まり次第更新してください。
 
 ## 参照
+
+- [ROS 2 Humble：Ubuntuへの導入](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html)
+- [ROS 2 Jazzy：Ubuntuへの導入](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html)
 
 - [Hokuyo urg_node2：導入・設定・起動手順](https://github.com/Hokuyo-aut/urg_node2)
 - [ROS joy：game_controller_nodeのマッピングと設定](https://github.com/ros-drivers/joystick_drivers/blob/ros2/joy/README.md)

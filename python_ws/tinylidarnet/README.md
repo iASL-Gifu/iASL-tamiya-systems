@@ -39,15 +39,17 @@ cd ..
 
 変換だけを行う場合は、requirements.txtの代わりに`uv pip install -e './tinylidarnet[bags]'`を`python_ws`内で実行するとPyTorchを省略できます。
 
-車載側では、JetPackなどの環境に対応したPyTorchを先に導入し、**ROSノードを起動するPython環境**に共有パッケージを入れます。学習用の仮想環境とは別でも構いません。MCAP→NPZ変換だけならPyTorchは不要です。
+車載側では、[メインREADME](../../README.md#セットアップ)でROS 2と車載仮想環境を準備します。JetPack・ROSのPythonバージョンに対応したPyTorchをその環境に先に導入し、**ROSノードを起動するPython環境**に共有パッケージを入れます。学習用の仮想環境とは分けて使用します。MCAP→NPZ変換だけならPyTorchは不要です。JetsonのPyTorchと追加のシステムライブラリ（OpenBLAS、バージョンによってはcuSPARSELtなど）は[NVIDIAの導入手順](https://docs.nvidia.com/deeplearning/frameworks/install-pytorch-jetson-platform/index.html)に従い、使用するJetPackに対応するものを選んでください。
 
 ```bash
-source /opt/ros/humble/setup.bash
+export RC_ROS_DISTRO=humble  # Ubuntu 24.04の場合は jazzy
+source "/opt/ros/${RC_ROS_DISTRO}/setup.bash"
+source "$HOME/.venvs/rc-car-${RC_ROS_DISTRO}/bin/activate"
 source ~/drivers_ws/install/setup.bash
 python3 -m pip install -e ./python_ws/tinylidarnet
 cd ros2_ws
 rosdep install --from-paths src --ignore-src -r -y --rosdistro ${ROS_DISTRO}
-colcon build --symlink-install
+python3 /usr/bin/colcon build --symlink-install --cmake-args -DPython3_EXECUTABLE="$(command -v python3)"
 source install/setup.bash
 cd ..
 ```

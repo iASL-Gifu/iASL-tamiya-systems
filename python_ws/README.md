@@ -45,7 +45,7 @@ LinuxのNVIDIA GPU環境では、通常の導入コマンドの代わりに次�
 uv pip install --torch-backend=auto -r requirements.txt
 ```
 
-Jetsonの推論環境はJetPackとROSが使うPythonに合わせて別途準備します。この学習用Python 3.11環境をそのままROS Humbleの実行環境には使いません。
+Jetsonの推論環境はJetPackとROSが使うPythonに合わせて別途準備します。この学習用Python 3.11環境をそのままROSの実行環境には使いません。車載側は[メインREADME](../README.md#セットアップ)でHumble／Jazzyと専用のPython環境を準備してください。
 
 ## TinyLidarNetの学習までに行うこと
 
