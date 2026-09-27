@@ -1,0 +1,11 @@
+tinylidarnet_node:
+  ros__parameters:
+    # model_dirはlaunch引数で必ず指定する。
+    # 入力1081点、-135〜135度、距離上限30 mなどの前処理はモデルから読み込む。
+    device: cpu
+    torch_threads: 1
+    publish_rate: 20.0
+    scan_timeout: 0.2
+    expected_frame_id: "" # 必要に応じて実機のLaserScanのframe_idを指定
+    max_throttle: 0.25
+    max_steering: 1.0

@@ -1,0 +1,3 @@
+# python_wsディレクトリで uv pip install -r requirements.txt を実行する。
+# numpy / tqdm / torch / rosbagsの範囲はtinylidarnet/pyproject.tomlで管理。
+-e ./tinylidarnet[torch,bags]

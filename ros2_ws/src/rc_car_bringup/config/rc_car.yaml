@@ -1,0 +1,35 @@
+joy_node:
+  ros__parameters:
+    device_id: 0
+    device_name: ""
+    deadzone: 0.08
+    autorepeat_rate: 20.0
+    sticky_buttons: false
+
+teleop_manager:
+  ros__parameters:
+    manual_button: 3                 # SDL Y / DualShock 4 triangle
+    auto_button: 2                   # SDL X / DualShock 4 square
+    steering_axis: 0                # Left stick horizontal
+    throttle_axis: 1                # Left stick vertical
+    steering_inverted: false
+    throttle_inverted: false
+    max_throttle: 0.25
+    max_steering: 1.0
+    joy_timeout: 0.3
+    auto_timeout: 0.3
+    publish_rate: 50.0
+
+jetracer_node:
+  ros__parameters:
+    # use_mock_hardware is controlled by the launch argument.
+    command_timeout: 0.3
+    update_rate: 50.0
+    max_throttle: 0.25
+    max_steering: 1.0
+    i2c_address: 64                  # 0x40
+    steering_channel: 0
+    throttle_channel: 1
+    steering_gain: -0.65
+    steering_offset: 0.0
+    throttle_gain: 0.8

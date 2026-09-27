@@ -1,0 +1,14 @@
+urg_node2:
+  ros__parameters:
+    ip_address: '192.168.0.10'  # 実際のLiDARのIPへ変更
+    ip_port: 10940
+    frame_id: laser
+    publish_intensity: false
+    publish_multiecho: false
+    angle_min: -2.356194490192345
+    angle_max: 2.356194490192345
+    cluster: 1
+    skip: 0
+    calibrate_time: false
+    synchronize_time: false
+    time_offset: 0.0

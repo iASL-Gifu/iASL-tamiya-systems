@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tinylidarnet"
+version = "0.1.0"
+description = "TinyLidarNet training and inference for normalized RC car commands"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.23,<2", "tqdm>=4.66,<5"]
+
+[project.optional-dependencies]
+torch = ["torch>=2.1,<3"]
+bags = ["rosbags>=0.10.11,<0.11"]
+
+[project.scripts]
+tinylidarnet-train = "tinylidarnet.train:main"
+tinylidarnet-bag-to-dataset = "tinylidarnet.bag_to_dataset:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

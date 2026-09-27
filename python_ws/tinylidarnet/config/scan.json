@@ -1,0 +1,7 @@
+{
+  "sample_count": 1081,
+  "angle_min_deg": -135.0,
+  "angle_max_deg": 135.0,
+  "max_distance": 30.0,
+  "min_finite_fraction": 0.1
+}
